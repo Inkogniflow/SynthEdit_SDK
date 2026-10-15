@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<PluginList>
+	<Plugin id="FV Wavetable Osc" name="Wavetable Osc" category="Waveform" graphicsApi="none" helpUrl="Wavetable.htm">
+		<Audio>
+			<Pin name="Pitch" datatype="float" rate="audio" default="0.5"/>
+			<Pin name="Position" datatype="float" rate="audio" default="0"/>
+			<Pin name="Sync" datatype="float" rate="audio" default="0"/>
+			<Pin name="Table" datatype="enum" default="0" metadata="Classic,PWM,Harmonic Sweep,Formant Vowels,Sync Sweep,Wavefold,WAV File"/>
+			<Pin name="Wavetable File" datatype="string" default="" isFilename="true" metadata="wav"/>
+			<Pin name="Output" direction="out" datatype="float" rate="audio"/>
+			<Pin name="Display Table" direction="out" datatype="blob"/>
+			<Pin name="Display Wave" direction="out" datatype="blob"/>
+		</Audio>
+	</Plugin>
+
+	<Plugin id="FV Wavetable Display" name="Wavetable Display" category="Controls" graphicsApi="GmpiGui" helpUrl="Wavetable.htm">
+		<Parameters>
+			<Parameter id="0" name="Table Data" datatype="blob" private="true" ignorePatchChange="true" isPolyphonic="true" persistant="false"/>
+			<Parameter id="1" name="Wave Data" datatype="blob" private="true" ignorePatchChange="true" isPolyphonic="true" persistant="false"/>
+		</Parameters>
+		<Audio>
+			<Pin name="Table" datatype="blob"/>
+			<Pin name="Wave" datatype="blob"/>
+			<Pin name="Table Data" direction="out" datatype="blob" parameterId="0" private="true" isPolyphonic="true"/>
+			<Pin name="Wave Data" direction="out" datatype="blob" parameterId="1" private="true" isPolyphonic="true"/>
+		</Audio>
+		<GUI>
+			<Pin id="0" name="Table Data" datatype="blob" parameterId="0" private="true" isPolyphonic="true"/>
+			<Pin id="1" name="Wave Data" datatype="blob" parameterId="1" private="true" isPolyphonic="true"/>
+			<Pin id="2" name="VoiceGate" datatype="float" hostConnect="Voice/Gate" isPolyphonic="true" private="true"/>
+			<Pin id="3" name="View" datatype="enum" default="1" metadata="2D,3D"/>
+			<Pin id="4" name="Background Color" datatype="string" default="FF14181F"/>
+			<Pin id="5" name="Grid Color" datatype="string" default="FF2C3440"/>
+			<Pin id="6" name="Wave Color" datatype="string" default="FF5BE7FF"/>
+			<Pin id="7" name="Fill Color" datatype="string" default="405BE7FF"/>
+			<Pin id="8" name="Frames Color" datatype="string" default="605B8AA8"/>
+			<Pin id="9" name="Line Width" datatype="float" default="1.5"/>
+			<Pin id="10" name="Show Grid" datatype="bool" default="1"/>
+		</GUI>
+	</Plugin>
+</PluginList>

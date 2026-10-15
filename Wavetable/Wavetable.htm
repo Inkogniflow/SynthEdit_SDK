@@ -1,0 +1,25 @@
+<html><head><title>Wavetable Osc / Wavetable Display</title></head>
+<body>
+<h2>Wavetable Osc</h2>
+<p>Band-limited wavetable oscillator. Each table holds up to 256 frames; <b>Position</b> morphs smoothly between them.
+Tables are stored as half-octave mip levels and read with Hermite interpolation, so there is no audible aliasing.</p>
+<ul>
+<li><b>Pitch</b> - 1 V/oct, 5 V = 440 Hz.</li>
+<li><b>Position</b> - 0 V = first frame, 10 V = last frame. Can be modulated at audio rate.</li>
+<li><b>Sync</b> - a rising edge through 0 V restarts the cycle (hard sync).</li>
+<li><b>Table</b> - Classic (sine, triangle, saw, square), PWM, Harmonic Sweep, Formant Vowels, Sync Sweep, Wavefold, or WAV File.</li>
+<li><b>Wavetable File</b> - a .wav wavetable, used when Table = WAV File. Serum-style files (2048 samples per frame) load directly;
+a 'clm ' chunk sets a different frame size. A short file is used as a single cycle. If the file can't be read, Classic is used.</li>
+<li><b>Output</b> - audio, +/-5 V.</li>
+<li><b>Display Table</b> / <b>Display Wave</b> - connect to the Wavetable Display.</li>
+</ul>
+<h2>Wavetable Display</h2>
+<p>Shows the wavetable of a connected Wavetable Osc. Put it in the same container as the oscillator. In polyphonic patches it follows the most recently played voice.</p>
+<ul>
+<li><b>Table</b> / <b>Wave</b> - connect to the oscillator's Display Table / Display Wave.</li>
+<li><b>View</b> - 2D shows the frame being played; 3D shows all frames with the current one highlighted.</li>
+<li><b>Background Color, Grid Color, Wave Color, Fill Color, Frames Color</b> - hex colours AARRGGBB (e.g. FF5BE7FF) or RRGGBB. A '#' is allowed. An empty pin uses the default colour.</li>
+<li><b>Line Width</b> - outline width of the current waveform in pixels.</li>
+<li><b>Show Grid</b> - grid lines (2D) or floor outline (3D).</li>
+</ul>
+</body></html>
