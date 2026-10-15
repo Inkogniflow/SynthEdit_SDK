@@ -1,0 +1,17 @@
+<html><head><title>Disperser</title></head>
+<body>
+<h2>Disperser</h2>
+<p>A chain of identical 2nd-order allpass filters. The level of every frequency stays the same,
+but frequencies near the centre frequency are delayed more than the rest, so drums and plucks
+are smeared into a chirp or "laser" sound. More stages give a stronger effect.</p>
+<h3>Pins</h3>
+<ul>
+<li><b>Signal</b> - audio input.</li>
+<li><b>Frequency</b> - centre frequency, 1 V/oct, 5 V = 440 Hz. Can be modulated at audio rate.</li>
+<li><b>Pinch</b> - how narrow the affected band is. 0 V = wide and smooth (Q 0.5), 10 V = narrow and ringing (Q 32).</li>
+<li><b>Amount</b> - number of allpass stages, 0 to 128. 0 bypasses the effect.</li>
+<li><b>Mix</b> - 0 V = dry, 10 V = fully dispersed. In between, dry and wet mix to make phaser-like notches.</li>
+<li><b>Output</b> - audio output.</li>
+</ul>
+<p>CPU use grows with Amount. Modulating Frequency or Pinch costs a little more than fixed values.</p>
+</body></html>
