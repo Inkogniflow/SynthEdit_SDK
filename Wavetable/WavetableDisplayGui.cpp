@@ -58,7 +58,14 @@ WavetableDisplayGui::WavetableDisplayGui()
 	initializePin(9, pinLineWidth,       static_cast<MpGuiBaseMemberPtr2>(&WavetableDisplayGui::onRedraw));
 	initializePin(10, pinShowGrid,       static_cast<MpGuiBaseMemberPtr2>(&WavetableDisplayGui::onRedraw));
 
-	onColorsChanged();
+	// Note: no host calls here. The graphics host is only connected after construction (setHost),
+	// so invalidateRect() in the constructor would crash SynthEdit when the module is inserted.
+}
+
+void WavetableDisplayGui::redraw()
+{
+	if (getGuiHost())
+		invalidateRect();
 }
 
 void WavetableDisplayGui::onDataChanged(int voice)
@@ -69,7 +76,7 @@ void WavetableDisplayGui::onDataChanged(int voice)
 	if (!currentHeld || thisHeld)
 		newestVoice_ = voice;
 
-	invalidateRect();
+	redraw();
 }
 
 void WavetableDisplayGui::onGateChanged(int voice)
@@ -77,23 +84,18 @@ void WavetableDisplayGui::onGateChanged(int voice)
 	if (pinGate.getValue(voice) > 0.f)
 	{
 		newestVoice_ = voice;
-		invalidateRect();
+		redraw();
 	}
 }
 
 void WavetableDisplayGui::onColorsChanged()
 {
-	backgroundColor_ = parseColor(pinBackgroundColor.getValue(), kDefaultBackground);
-	gridColor_       = parseColor(pinGridColor.getValue(), kDefaultGrid);
-	waveColor_       = parseColor(pinWaveColor.getValue(), kDefaultWave);
-	fillColor_       = parseColor(pinFillColor.getValue(), kDefaultFill);
-	framesColor_     = parseColor(pinFramesColor.getValue(), kDefaultFrames);
-	invalidateRect();
+	redraw(); // colours are parsed in OnRender()
 }
 
 void WavetableDisplayGui::onRedraw()
 {
-	invalidateRect();
+	redraw();
 }
 
 bool WavetableDisplayGui::getTable(TableView& out)
@@ -173,6 +175,12 @@ int32_t WavetableDisplayGui::OnRender(GmpiDrawing_API::IMpDeviceContext* drawing
 {
 	Graphics g(drawingContext);
 	const Rect r = getRect();
+
+	backgroundColor_ = parseColor(pinBackgroundColor.getValue(), kDefaultBackground);
+	gridColor_       = parseColor(pinGridColor.getValue(), kDefaultGrid);
+	waveColor_       = parseColor(pinWaveColor.getValue(), kDefaultWave);
+	fillColor_       = parseColor(pinFillColor.getValue(), kDefaultFill);
+	framesColor_     = parseColor(pinFramesColor.getValue(), kDefaultFrames);
 
 	g.FillRectangle(r, g.CreateSolidColorBrush(backgroundColor_));
 

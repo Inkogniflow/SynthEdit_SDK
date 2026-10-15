@@ -1,5 +1,21 @@
+#ifdef _WIN32
+	#ifndef NOMINMAX
+		#define NOMINMAX
+	#endif
+	#ifndef WIN32_LEAN_AND_MEAN
+		#define WIN32_LEAN_AND_MEAN
+	#endif
+	#include <windows.h>
+#else
+	#include <dirent.h>
+	#include <sys/stat.h>
+#endif
+
+#define _USE_MATH_DEFINES
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <wctype.h>
 #include <algorithm>
 #include "./WavetableOsc.h"
 #include "./WavetableDisplayFormat.h"
@@ -12,8 +28,146 @@ REGISTER_PLUGIN2(WavetableOsc, L"FV Wavetable Osc");
 
 namespace
 {
-	constexpr int kWavFileTable = NumBuiltIns; // last enum entry
-	constexpr float kOutputLevel = 0.5f;        // +/-5 V, like SynthEdit's own oscillators
+	constexpr int kWavFileTable  = NumBuiltIns;     // enum entries after the built-ins
+	constexpr int kFileListTable = NumBuiltIns + 1;
+	constexpr float kOutputLevel = 0.5f;            // +/-5 V, like SynthEdit's own oscillators
+
+#ifdef _WIN32
+	constexpr wchar_t kPathSep = L'\\';
+#else
+	constexpr wchar_t kPathSep = L'/';
+#endif
+
+	std::wstring trim(const std::wstring& s)
+	{
+		size_t a = 0, b = s.size();
+		while (a < b && (iswspace(s[a]) || s[a] == L'"')) ++a;
+		while (b > a && (iswspace(s[b - 1]) || s[b - 1] == L'"')) --b;
+		return s.substr(a, b - a);
+	}
+
+	std::vector<std::wstring> splitList(const std::wstring& list)
+	{
+		std::vector<std::wstring> items;
+		std::wstring current;
+		for (wchar_t c : list)
+		{
+			if (c == L';' || c == L'|' || c == L'\n' || c == L'\r')
+			{
+				current = trim(current);
+				if (!current.empty())
+					items.push_back(current);
+				current.clear();
+			}
+			else
+			{
+				current += c;
+			}
+		}
+		current = trim(current);
+		if (!current.empty())
+			items.push_back(current);
+		return items;
+	}
+
+	// "wave2" before "wave10", case-insensitive.
+	bool naturalLess(const std::wstring& a, const std::wstring& b)
+	{
+		size_t i = 0, j = 0;
+		while (i < a.size() && j < b.size())
+		{
+			if (iswdigit(a[i]) && iswdigit(b[j]))
+			{
+				size_t i2 = i, j2 = j;
+				while (i2 < a.size() && iswdigit(a[i2])) ++i2;
+				while (j2 < b.size() && iswdigit(b[j2])) ++j2;
+				const std::wstring na = a.substr(i, i2 - i), nb = b.substr(j, j2 - j);
+				const std::wstring ta = na.substr((std::min)(na.find_first_not_of(L'0'), na.size()));
+				const std::wstring tb = nb.substr((std::min)(nb.find_first_not_of(L'0'), nb.size()));
+				if (ta.size() != tb.size())
+					return ta.size() < tb.size();
+				if (ta != tb)
+					return ta < tb;
+				i = i2;
+				j = j2;
+			}
+			else
+			{
+				const wchar_t ca = towlower(a[i]), cb = towlower(b[j]);
+				if (ca != cb)
+					return ca < cb;
+				++i;
+				++j;
+			}
+		}
+		return a.size() - i < b.size() - j;
+	}
+
+	bool hasWavExtension(const std::wstring& name)
+	{
+		if (name.size() < 4)
+			return false;
+		std::wstring ext = name.substr(name.size() - 4);
+		for (auto& c : ext)
+			c = towlower(c);
+		return ext == L".wav";
+	}
+
+	bool isDirectory(const std::wstring& path)
+	{
+		if (path.empty())
+			return false;
+#ifdef _WIN32
+		const DWORD attr = GetFileAttributesW(path.c_str());
+		return attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY);
+#else
+		struct stat st;
+		const auto utf8 = JmUnicodeConversions::WStringToUtf8(path);
+		return stat(utf8.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
+#endif
+	}
+
+	// Full paths of the .wav files in a folder, in natural order. Hidden files are skipped.
+	std::vector<std::wstring> listWavFiles(std::wstring folder)
+	{
+		while (!folder.empty() && (folder.back() == L'/' || folder.back() == L'\\'))
+			folder.pop_back();
+
+		std::vector<std::wstring> names;
+#ifdef _WIN32
+		WIN32_FIND_DATAW fd;
+		HANDLE h = FindFirstFileW((folder + L"\\*.wav").c_str(), &fd);
+		if (h != INVALID_HANDLE_VALUE)
+		{
+			do
+			{
+				if (!(fd.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_HIDDEN)) && fd.cFileName[0] != L'.')
+					names.push_back(fd.cFileName);
+			} while (FindNextFileW(h, &fd));
+			FindClose(h);
+		}
+#else
+		const auto utf8 = JmUnicodeConversions::WStringToUtf8(folder);
+		if (DIR* dir = opendir(utf8.c_str()))
+		{
+			while (dirent* e = readdir(dir))
+			{
+				if (e->d_name[0] == '.') // hidden, and macOS "._" resource files
+					continue;
+				const auto name = JmUnicodeConversions::Utf8ToWstring(e->d_name);
+				if (hasWavExtension(name))
+					names.push_back(name);
+			}
+			closedir(dir);
+		}
+#endif
+		std::sort(names.begin(), names.end(), naturalLess);
+
+		std::vector<std::wstring> paths;
+		for (const auto& n : names)
+			paths.push_back(folder + kPathSep + n);
+		return paths;
+	}
 }
 
 WavetableOsc::WavetableOsc()
@@ -21,10 +175,18 @@ WavetableOsc::WavetableOsc()
 	// Order must match the <Audio> pins in Wavetable.xml.
 	initializePin(pinPitch);
 	initializePin(pinPosition);
+	initializePin(pinPhase);
 	initializePin(pinSync);
 	initializePin(pinTable);
 	initializePin(pinFile);
-	initializePin(pinOutput);
+	initializePin(pinFileList);
+	initializePin(pinVoices);
+	initializePin(pinDetune);
+	initializePin(pinWidth);
+	initializePin(pinPan);
+	initializePin(pinOn);
+	initializePin(pinLeft);
+	initializePin(pinRight);
 	initializePin(pinDisplayTable);
 	initializePin(pinDisplayWave);
 }
@@ -33,6 +195,7 @@ int32_t WavetableOsc::open()
 {
 	sampleRate_ = getSampleRate();
 	displayInterval_ = (std::max)(64, (int)(sampleRate_ / 30.f));
+	resetPhases();
 
 	SET_PROCESS2(&WavetableOsc::subProcess);
 
@@ -48,6 +211,47 @@ float WavetableOsc::pitchToIncrement(float pitch) const
 
 	const float hz = 440.f * exp2f(volts - 5.f);
 	return (std::min)(hz / sampleRate_, 0.45f);
+}
+
+void WavetableOsc::resetPhases()
+{
+	for (int v = 0; v < kMaxVoices; ++v)
+	{
+		// Unison voices start spread over the cycle (golden ratio), voice 1 at 0.
+		const float start = numVoices_ > 1 ? (float)fmod(v * 0.6180339887, 1.0) : 0.f;
+		voices_[v].startPhase = start;
+		voices_[v].phase = start;
+	}
+}
+
+void WavetableOsc::updateUnison(float detune, float width, float pan)
+{
+	lastDetune_ = detune;
+	lastWidth_ = width;
+	lastPan_ = pan;
+
+	detune = (std::max)(0.f, (std::min)(1.f, detune));        // 0..10 V
+	width  = (std::max)(0.f, (std::min)(1.f, width));         // 0..10 V
+	pan    = (std::max)(-1.f, (std::min)(1.f, pan * 2.f));    // -5..+5 V
+
+	const int n = numVoices_;
+	const float maxCents = 100.f * detune * detune;           // curved: 5 V = 25 cents
+	unisonGain_ = 1.f / sqrtf((float)n);
+
+	for (int v = 0; v < n; ++v)
+	{
+		const float spread = n > 1 ? 2.f * v / (n - 1) - 1.f : 0.f; // -1..+1
+		const float cents = maxCents * spread;
+
+		Voice& voice = voices_[v];
+		voice.ratio = exp2f(cents / 1200.f);
+		voice.levelOffset = 2.f * cents / 1200.f;
+
+		// balance pan law: centre = 0 dB on both sides, the far side fades out, no boost at the edges
+		const float p = (std::max)(-1.f, (std::min)(1.f, pan + width * spread));
+		voice.gainL = p > 0.f ? 1.f - p : 1.f;
+		voice.gainR = p < 0.f ? 1.f + p : 1.f;
+	}
 }
 
 bool WavetableOsc::readFile(const std::wstring& shortName, std::vector<uint8_t>& bytes, std::string& fullName)
@@ -98,28 +302,85 @@ bool WavetableOsc::readFile(const std::wstring& shortName, std::vector<uint8_t>&
 	return !bytes.empty();
 }
 
+std::shared_ptr<const Wavetable> WavetableOsc::loadFileList(const std::wstring& list)
+{
+	// Expand folders, keep explicit files in the given order.
+	std::vector<std::wstring> files;
+	for (const auto& item : splitList(list))
+	{
+		std::wstring folder;
+		if (isDirectory(item))
+			folder = item;
+		else
+		{
+			const auto resolved = host.resolveFilename_old(item); // relative to SynthEdit's default folder
+			if (isDirectory(resolved))
+				folder = resolved;
+		}
+
+		if (!folder.empty())
+		{
+			for (const auto& f : listWavFiles(folder))
+				files.push_back(f);
+		}
+		else
+		{
+			files.push_back(item);
+		}
+
+		if (files.size() >= (size_t)kMaxFrames)
+			break;
+	}
+
+	if (files.empty())
+		return {};
+
+	std::string key = "list:";
+	for (const auto& f : files)
+		key += JmUnicodeConversions::WStringToUtf8(f) + "\n";
+
+	if (auto cached = findCached(key))
+		return cached;
+
+	std::vector<std::vector<uint8_t>> contents;
+	for (const auto& f : files)
+	{
+		std::vector<uint8_t> bytes;
+		std::string fullName;
+		if (readFile(f, bytes, fullName))
+			contents.push_back(std::move(bytes));
+	}
+
+	std::string error;
+	int used = 0;
+	return loadWavList(contents, key, error, used);
+}
+
 void WavetableOsc::loadTable()
 {
 	std::shared_ptr<const Wavetable> newTable;
 
 	const int choice = pinTable.getValue();
-	const std::wstring fileName = pinFile.getValue();
 
-	if (choice == kWavFileTable && !fileName.empty())
+	if (choice == kWavFileTable && !pinFile.getValue().empty())
 	{
 		std::vector<uint8_t> bytes;
 		std::string fullName;
-		if (readFile(fileName, bytes, fullName))
+		if (readFile(pinFile.getValue(), bytes, fullName))
 		{
 			std::string error;
 			newTable = loadWav(bytes, "file:" + fullName, error);
 		}
 	}
+	else if (choice == kFileListTable && !pinFileList.getValue().empty())
+	{
+		newTable = loadFileList(pinFileList.getValue());
+	}
 
 	if (!newTable)
 	{
-		// Built-in table, or fallback when the file is missing/unreadable.
-		newTable = getBuiltIn(choice == kWavFileTable ? Classic : choice);
+		// Built-in table, or fallback when the file(s) are missing/unreadable.
+		newTable = getBuiltIn(choice >= NumBuiltIns ? Classic : choice);
 	}
 
 	if (newTable != table_)
@@ -200,41 +461,86 @@ void WavetableOsc::sendDisplayWave(float position)
 
 void WavetableOsc::onSetPins()
 {
-	if (pinTable.isUpdated() || pinFile.isUpdated() || !table_)
+	if (pinTable.isUpdated() || pinFile.isUpdated() || pinFileList.isUpdated() || !table_)
 	{
 		loadTable();
+	}
+
+	if (pinVoices.isUpdated())
+	{
+		numVoices_ = (std::max)(1, (std::min)((int)pinVoices.getValue(), kMaxVoices));
+		lastDetune_ = -1.f; // force unison recalculation
+		resetPhases();
 	}
 
 	if (!pinPitch.isStreaming())
 	{
 		increment_ = pitchToIncrement(pinPitch.getValue());
-		level_ = levelForIncrement(increment_);
 	}
 
-	pinOutput.setStreaming(true);
+	if (pinOn.getValue())
+	{
+		if (!wasOn_)
+		{
+			resetPhases();
+			wasOn_ = true;
+		}
+		pinLeft.setStreaming(true);
+		pinRight.setStreaming(true);
+		SET_PROCESS2(&WavetableOsc::subProcess);
+	}
+	else
+	{
+		wasOn_ = false;
+		pinLeft.setStreaming(false);
+		pinRight.setStreaming(false);
+		SET_PROCESS2(&WavetableOsc::subProcessOff);
+	}
+}
+
+void WavetableOsc::subProcessOff(int sampleFrames)
+{
+	float* outL = getBuffer(pinLeft);
+	float* outR = getBuffer(pinRight);
+	for (int s = 0; s < sampleFrames; ++s)
+	{
+		outL[s] = 0.f;
+		outR[s] = 0.f;
+	}
 }
 
 void WavetableOsc::subProcess(int sampleFrames)
 {
 	const float* pitch = getBuffer(pinPitch);
 	const float* position = getBuffer(pinPosition);
+	const float* phaseIn = getBuffer(pinPhase);
 	const float* sync = getBuffer(pinSync);
-	float* out = getBuffer(pinOutput);
+	float* outL = getBuffer(pinLeft);
+	float* outR = getBuffer(pinRight);
 
 	const Wavetable* wt = table_.get();
 	if (!wt || wt->frames < 1)
 	{
-		for (int s = 0; s < sampleFrames; ++s)
-			out[s] = 0.f;
+		subProcessOff(sampleFrames);
 		return;
+	}
+
+	// Unison detune / width / pan are updated once per block.
+	{
+		const float detune = getBuffer(pinDetune)[0];
+		const float width = getBuffer(pinWidth)[0];
+		const float pan = getBuffer(pinPan)[0];
+		if (detune != lastDetune_ || width != lastWidth_ || pan != lastPan_)
+			updateUnison(detune, width, pan);
 	}
 
 	const bool pitchModulated = pinPitch.isStreaming();
 	const int lastFrame = wt->frames - 1;
+	const int numVoices = numVoices_;
+	const float outGain = kOutputLevel * unisonGain_;
 
-	float phase = phase_;
 	float increment = increment_;
-	int level = level_;
+	float baseX = levelX(increment);
 	float prevSync = prevSync_;
 	float pos = lastPosition_;
 
@@ -243,13 +549,16 @@ void WavetableOsc::subProcess(int sampleFrames)
 		if (pitchModulated)
 		{
 			increment = pitchToIncrement(pitch[s]);
-			level = levelForIncrement(increment);
+			baseX = levelX(increment);
 		}
 
 		// hard sync on rising edge
 		const float sy = sync[s];
 		if (sy > 0.f && prevSync <= 0.f)
-			phase = 0.f;
+		{
+			for (int v = 0; v < numVoices; ++v)
+				voices_[v].phase = voices_[v].startPhase;
+		}
 		prevSync = sy;
 
 		// frame position, 0..10 V
@@ -260,25 +569,46 @@ void WavetableOsc::subProcess(int sampleFrames)
 		const int f1 = f0 < lastFrame ? f0 + 1 : lastFrame;
 		const float ft = fpos - f0;
 
-		// read both frames at the same mip level (Hermite interpolation)
-		const int size = wt->levelSize[level];
-		const float idx = phase * size;
-		const int i = (int)idx;
-		const float t = idx - i;
+		// phase offset, 0..10 V = one cycle
+		const float phaseOffset = phaseIn[s];
 
-		const float va = hermite(wt->level(f0, level) + i, t);
-		const float vb = hermite(wt->level(f1, level) + i, t);
+		float left = 0.f, right = 0.f;
+		for (int v = 0; v < numVoices; ++v)
+		{
+			Voice& voice = voices_[v];
 
-		out[s] = kOutputLevel * (va + ft * (vb - va));
+			float inc = increment * voice.ratio;
+			if (inc > 0.45f)
+				inc = 0.45f;
+			const int level = levelFromX(baseX + voice.levelOffset);
 
-		phase += increment;
-		if (phase >= 1.f)
-			phase -= 1.f;
+			float readPhase = voice.phase + phaseOffset;
+			readPhase -= floorf(readPhase);
+
+			const int size = wt->levelSize[level];
+			const float idx = readPhase * size;
+			int i = (int)idx;
+			if (i >= size) i = size - 1; // guards float rounding at the very end of the cycle
+			const float t = idx - i;
+
+			// both frames at the same mip level, Hermite interpolation, then morph
+			const float va = hermite(wt->level(f0, level) + i, t);
+			const float vb = hermite(wt->level(f1, level) + i, t);
+			const float value = va + ft * (vb - va);
+
+			left += value * voice.gainL;
+			right += value * voice.gainR;
+
+			voice.phase += inc;
+			if (voice.phase >= 1.f)
+				voice.phase -= 1.f;
+		}
+
+		outL[s] = left * outGain;
+		outR[s] = right * outGain;
 	}
 
-	phase_ = phase;
 	increment_ = increment;
-	level_ = level;
 	prevSync_ = prevSync;
 	lastPosition_ = pos;
 

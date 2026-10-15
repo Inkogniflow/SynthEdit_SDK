@@ -6,13 +6,24 @@ Tables are stored as half-octave mip levels and read with Hermite interpolation,
 <ul>
 <li><b>Pitch</b> - 1 V/oct, 5 V = 440 Hz.</li>
 <li><b>Position</b> - 0 V = first frame, 10 V = last frame. Can be modulated at audio rate.</li>
+<li><b>Phase</b> - phase offset, 0..10 V = 0..360 degrees. Audio rate, so it also works for phase modulation.</li>
 <li><b>Sync</b> - a rising edge through 0 V restarts the cycle (hard sync).</li>
-<li><b>Table</b> - Classic (sine, triangle, saw, square), PWM, Harmonic Sweep, Formant Vowels, Sync Sweep, Wavefold, or WAV File.</li>
+<li><b>Table</b> - Classic (sine, triangle, saw, square), PWM, Harmonic Sweep, Formant Vowels, Sync Sweep, Wavefold, WAV File or File List.</li>
 <li><b>Wavetable File</b> - a .wav wavetable, used when Table = WAV File. Serum-style files (2048 samples per frame) load directly;
-a 'clm ' chunk sets a different frame size. A short file is used as a single cycle. If the file can't be read, Classic is used.</li>
-<li><b>Output</b> - audio, +/-5 V.</li>
+a 'clm ' chunk sets a different frame size. A short file is used as a single cycle.</li>
+<li><b>File List</b> - used when Table = File List. A folder (all .wav files in it, sorted by name, "wave2" before "wave10"),
+or several files and/or folders separated by ';'. All waves are joined into one table and Position blends through them.
+Each file without a 'clm ' chunk counts as one single cycle (any length), unless its length is an exact multiple of 2048 samples.
+Every frame is normalised, so the blend stays even in level. Up to 256 frames in total.</li>
+<li><b>Voices</b> - unison voices, 1 to 16.</li>
+<li><b>Detune</b> - 0..10 V. The outer voices are detuned up to +/-100 cents; the curve is squared, so 5 V = +/-25 cents.</li>
+<li><b>Width</b> - 0..10 V, how far the unison voices are spread across the stereo field.</li>
+<li><b>Pan</b> - -5 V = left, 0 V = centre, +5 V = right (balance law: centre is 0 dB on both sides).</li>
+<li><b>On</b> - off = silence; the outputs stop streaming so the module uses no CPU.</li>
+<li><b>Left</b>, <b>Right</b> - audio, +/-5 V at centre. Several voices are scaled by 1/sqrt(Voices).</li>
 <li><b>Display Table</b> / <b>Display Wave</b> - connect to the Wavetable Display.</li>
 </ul>
+<p>If a file or folder can't be read, the Classic table is used. Built-in tables are calculated the first time they are used (about 0.2 s) and then shared by all voices.</p>
 <h2>Wavetable Display</h2>
 <p>Shows the wavetable of a connected Wavetable Osc. Put it in the same container as the oscillator. In polyphonic patches it follows the most recently played voice.</p>
 <ul>

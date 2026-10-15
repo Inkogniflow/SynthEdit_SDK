@@ -319,128 +319,182 @@ namespace fvwt
 		return wt;
 	}
 
+	namespace
+	{
+		// Decodes a WAV file and appends its cycles (as spectra) to 'out', at most 'maxFrames'.
+		// listMode: a file without 'clm ' chunk is one single cycle unless it is an exact multiple of 2048 samples.
+		bool decodeWav(const std::vector<uint8_t>& bytes, bool listMode, int maxFrames, std::vector<Spectrum>& out, std::string& error)
+		{
+			const uint8_t* p = bytes.data();
+			const size_t n = bytes.size();
+			if (n < 12 || memcmp(p, "RIFF", 4) != 0 || memcmp(p + 8, "WAVE", 4) != 0)
+			{
+				error = "not a WAV file";
+				return false;
+			}
+
+			int format = 0, channels = 0, bits = 0;
+			const uint8_t* data = nullptr;
+			size_t dataSize = 0;
+			int clmFrameSize = 0;
+
+			size_t pos = 12;
+			while (pos + 8 <= n)
+			{
+				const uint8_t* id = p + pos;
+				const size_t size = rd32(p + pos + 4);
+				const uint8_t* body = p + pos + 8;
+				const size_t avail = (std::min)(size, n - (pos + 8));
+
+				if (memcmp(id, "fmt ", 4) == 0 && avail >= 16)
+				{
+					format = rd16(body);
+					channels = rd16(body + 2);
+					bits = rd16(body + 14);
+					if (format == 0xFFFE && avail >= 26)
+						format = rd16(body + 24); // WAVE_FORMAT_EXTENSIBLE sub-format
+				}
+				else if (memcmp(id, "data", 4) == 0)
+				{
+					data = body;
+					dataSize = avail;
+				}
+				else if (memcmp(id, "clm ", 4) == 0)
+				{
+					// Serum writes e.g. "<!>2048 ..." - the number is the frame size.
+					std::string s((const char*)body, avail);
+					const auto at = s.find("<!>");
+					if (at != std::string::npos)
+						clmFrameSize = atoi(s.c_str() + at + 3);
+				}
+
+				pos += 8 + size + (size & 1);
+			}
+
+			if (!data || channels < 1 || !(format == 1 || format == 3))
+			{
+				error = "unsupported WAV format (use PCM or 32-bit float)";
+				return false;
+			}
+
+			const int bytesPerSample = bits / 8;
+			if (bytesPerSample < 1 || (format == 3 && bits != 32 && bits != 64) || (format == 1 && bits > 32))
+			{
+				error = "unsupported WAV bit depth";
+				return false;
+			}
+
+			const size_t stride = (size_t)bytesPerSample * channels;
+			const size_t total = dataSize / stride;
+			if (total < 8)
+			{
+				error = "WAV file is too short";
+				return false;
+			}
+
+			// First channel only.
+			std::vector<double> samples(total);
+			for (size_t i = 0; i < total; ++i)
+			{
+				const uint8_t* s = data + i * stride;
+				double v = 0.0;
+				if (format == 3)
+				{
+					if (bits == 32) { float f; memcpy(&f, s, 4); v = f; }
+					else { double d; memcpy(&d, s, 8); v = d; }
+				}
+				else switch (bits)
+				{
+				case 8:  v = (s[0] - 128) / 128.0; break;
+				case 16: v = (int16_t)rd16(s) / 32768.0; break;
+				case 24: v = (int32_t)((uint32_t)(s[0] << 8 | s[1] << 16 | (uint32_t)s[2] << 24)) / 2147483648.0; break;
+				case 32: v = (int32_t)rd32(s) / 2147483648.0; break;
+				}
+				samples[i] = std::isfinite(v) ? v : 0.0;
+			}
+
+			size_t frameSize;
+			if (clmFrameSize > 0)
+				frameSize = (size_t)clmFrameSize;
+			else if (listMode)
+				frameSize = (total > 2048 && total % 2048 == 0) ? 2048 : total;
+			else
+				frameSize = 2048;
+
+			if (total < frameSize)
+				frameSize = total; // single-cycle file
+
+			const int frames = (int)(std::min)((size_t)maxFrames, total / frameSize);
+
+			// Resample each frame to 2048 samples (exact copy when it already is 2048).
+			constexpr int kCycle = 2048;
+			std::vector<double> cycle(kCycle);
+			for (int f = 0; f < frames; ++f)
+			{
+				const double* src = samples.data() + (size_t)f * frameSize;
+				for (int i = 0; i < kCycle; ++i)
+				{
+					const double x = i * (double)frameSize / kCycle;
+					const size_t i0 = (size_t)x;
+					const size_t i1 = (i0 + 1) % frameSize;
+					const double t = x - i0;
+					cycle[i] = src[i0] + t * (src[i1] - src[i0]);
+				}
+				out.push_back(spectrumFromCycle(cycle));
+			}
+			return frames > 0;
+		}
+	}
+
+	std::shared_ptr<const Wavetable> findCached(const std::string& cacheKey)
+	{
+		std::lock_guard<std::mutex> lock(cacheMutex());
+		auto it = cache().find(cacheKey);
+		return it == cache().end() ? nullptr : it->second.lock();
+	}
+
 	std::shared_ptr<const Wavetable> loadWav(const std::vector<uint8_t>& bytes, const std::string& cacheKey, std::string& error)
 	{
-		{
-			std::lock_guard<std::mutex> lock(cacheMutex());
-			if (auto existing = cache()[cacheKey].lock())
-				return existing;
-		}
+		if (auto existing = findCached(cacheKey))
+			return existing;
 
-		const uint8_t* p = bytes.data();
-		const size_t n = bytes.size();
-		if (n < 12 || memcmp(p, "RIFF", 4) != 0 || memcmp(p + 8, "WAVE", 4) != 0)
-		{
-			error = "not a WAV file";
-			return {};
-		}
-
-		int format = 0, channels = 0, bits = 0;
-		const uint8_t* data = nullptr;
-		size_t dataSize = 0;
-		int clmFrameSize = 0;
-
-		size_t pos = 12;
-		while (pos + 8 <= n)
-		{
-			const uint8_t* id = p + pos;
-			const size_t size = rd32(p + pos + 4);
-			const uint8_t* body = p + pos + 8;
-			const size_t avail = (std::min)(size, n - (pos + 8));
-
-			if (memcmp(id, "fmt ", 4) == 0 && avail >= 16)
-			{
-				format = rd16(body);
-				channels = rd16(body + 2);
-				bits = rd16(body + 14);
-				if (format == 0xFFFE && avail >= 26)
-					format = rd16(body + 24); // WAVE_FORMAT_EXTENSIBLE sub-format
-			}
-			else if (memcmp(id, "data", 4) == 0)
-			{
-				data = body;
-				dataSize = avail;
-			}
-			else if (memcmp(id, "clm ", 4) == 0)
-			{
-				// Serum writes e.g. "<!>2048 ..." - the number is the frame size.
-				std::string s((const char*)body, avail);
-				const auto at = s.find("<!>");
-				if (at != std::string::npos)
-					clmFrameSize = atoi(s.c_str() + at + 3);
-			}
-
-			pos += 8 + size + (size & 1);
-		}
-
-		if (!data || channels < 1 || !(format == 1 || format == 3))
-		{
-			error = "unsupported WAV format (use PCM or 32-bit float)";
-			return {};
-		}
-
-		const int bytesPerSample = bits / 8;
-		if (bytesPerSample < 1 || (format == 3 && bits != 32 && bits != 64) || (format == 1 && bits > 32))
-		{
-			error = "unsupported WAV bit depth";
-			return {};
-		}
-
-		const size_t stride = (size_t)bytesPerSample * channels;
-		const size_t total = dataSize / stride;
-
-		// First channel only.
-		std::vector<double> samples(total);
-		for (size_t i = 0; i < total; ++i)
-		{
-			const uint8_t* s = data + i * stride;
-			double v = 0.0;
-			if (format == 3)
-			{
-				if (bits == 32) { float f; memcpy(&f, s, 4); v = f; }
-				else { double d; memcpy(&d, s, 8); v = d; }
-			}
-			else switch (bits)
-			{
-			case 8:  v = (s[0] - 128) / 128.0; break;
-			case 16: v = (int16_t)rd16(s) / 32768.0; break;
-			case 24: v = (int32_t)((uint32_t)(s[0] << 8 | s[1] << 16 | (uint32_t)s[2] << 24)) / 2147483648.0; break;
-			case 32: v = (int32_t)rd32(s) / 2147483648.0; break;
-			}
-			samples[i] = std::isfinite(v) ? v : 0.0;
-		}
-
-		if (total < 8)
-		{
-			error = "WAV file is too short";
-			return {};
-		}
-
-		size_t frameSize = clmFrameSize > 0 ? (size_t)clmFrameSize : 2048;
-		if (total < frameSize)
-			frameSize = total; // single-cycle file
-
-		const int frames = (int)(std::min)((size_t)kMaxFrames, total / frameSize);
-
-		// Resample each frame to 2048 samples (exact copy when it already is 2048).
-		constexpr int kCycle = 2048;
 		std::vector<Spectrum> spectra;
-		std::vector<double> cycle(kCycle);
-		for (int f = 0; f < frames; ++f)
-		{
-			const double* src = samples.data() + (size_t)f * frameSize;
-			for (int i = 0; i < kCycle; ++i)
-			{
-				const double x = i * (double)frameSize / kCycle;
-				const size_t i0 = (size_t)x;
-				const size_t i1 = (i0 + 1) % frameSize;
-				const double t = x - i0;
-				cycle[i] = src[i0] + t * (src[i1] - src[i0]);
-			}
-			spectra.push_back(spectrumFromCycle(cycle));
-		}
+		if (!decodeWav(bytes, false, kMaxFrames, spectra, error))
+			return {};
 
 		std::shared_ptr<const Wavetable> wt = buildFromSpectra(spectra, false);
+
+		std::lock_guard<std::mutex> lock(cacheMutex());
+		cache()[cacheKey] = wt;
+		return wt;
+	}
+
+	std::shared_ptr<const Wavetable> loadWavList(const std::vector<std::vector<uint8_t>>& files, const std::string& cacheKey, std::string& error, int& filesUsed)
+	{
+		filesUsed = 0;
+		if (auto existing = findCached(cacheKey))
+			return existing;
+
+		std::vector<Spectrum> spectra;
+		for (const auto& bytes : files)
+		{
+			const int room = kMaxFrames - (int)spectra.size();
+			if (room <= 0)
+				break;
+
+			std::string fileError;
+			if (decodeWav(bytes, true, room, spectra, fileError))
+				++filesUsed;
+		}
+
+		if (spectra.empty())
+		{
+			error = "no usable WAV files";
+			return {};
+		}
+
+		// Files come from different sources - normalise each frame so the morph stays even in level.
+		std::shared_ptr<const Wavetable> wt = buildFromSpectra(spectra, true);
 
 		std::lock_guard<std::mutex> lock(cacheMutex());
 		cache()[cacheKey] = wt;
