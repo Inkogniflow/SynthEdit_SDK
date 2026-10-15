@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<PluginList>
+	<Plugin id="Sxynthedit Waveshaper" name="SXE Waveshaper" category="Sxynthedit" graphicsApi="none" helpUrl="Waveshaper.htm">
+		<Audio>
+			<Pin name="Left In" datatype="float" rate="audio" default="0"/>
+			<Pin name="Right In" datatype="float" rate="audio" default="0"/>
+			<Pin name="Position" datatype="float" rate="audio" default="0"/>
+			<Pin name="A" datatype="float" rate="audio" default="0"/>
+			<Pin name="B" datatype="float" rate="audio" default="0"/>
+			<Pin name="C" datatype="float" rate="audio" default="0"/>
+			<Pin name="D" datatype="float" rate="audio" default="0"/>
+			<Pin name="Mix" datatype="float" rate="audio" default="1"/>
+			<Pin name="Table" datatype="enum" default="0" metadata="Saturation,Folding,Harmonics,Asymmetric,Digital,Custom"/>
+			<Pin name="Functions" datatype="string" default="Clean: x; Drive: tanh(x*A(1,10)); Fold: fold(x*A(1,6)+B(-1,1)); Crush: quant(x, 2^A(1,8))"/>
+			<Pin name="Oversampling" datatype="enum" default="2" metadata="Off,2x,4x,8x"/>
+			<Pin name="DC Block" datatype="bool" default="1"/>
+			<Pin name="Left Out" direction="out" datatype="float" rate="audio"/>
+			<Pin name="Right Out" direction="out" datatype="float" rate="audio"/>
+			<Pin name="Display Table" direction="out" datatype="blob"/>
+			<Pin name="Display Curve" direction="out" datatype="blob"/>
+		</Audio>
+	</Plugin>
+
+	<Plugin id="Sxynthedit Waveshaper Display" name="SXE Waveshaper Display" category="Sxynthedit" graphicsApi="GmpiGui" helpUrl="Waveshaper.htm">
+		<Parameters>
+			<Parameter id="0" name="Table Data" datatype="blob" private="true" ignorePatchChange="true" isPolyphonic="true" persistant="false"/>
+			<Parameter id="1" name="Curve Data" datatype="blob" private="true" ignorePatchChange="true" isPolyphonic="true" persistant="false"/>
+		</Parameters>
+		<Audio>
+			<Pin name="Table" datatype="blob"/>
+			<Pin name="Curve" datatype="blob"/>
+			<Pin name="Table Data" direction="out" datatype="blob" parameterId="0" private="true" isPolyphonic="true"/>
+			<Pin name="Curve Data" direction="out" datatype="blob" parameterId="1" private="true" isPolyphonic="true"/>
+		</Audio>
+		<GUI>
+			<Pin id="0" name="Table Data" datatype="blob" parameterId="0" private="true" isPolyphonic="true"/>
+			<Pin id="1" name="Curve Data" datatype="blob" parameterId="1" private="true" isPolyphonic="true"/>
+			<Pin id="2" name="VoiceGate" datatype="float" hostConnect="Voice/Gate" isPolyphonic="true" private="true"/>
+			<Pin id="3" name="View" datatype="enum" default="0" metadata="2D,3D"/>
+			<Pin id="4" name="Background Color" datatype="string" default="FF14181F"/>
+			<Pin id="5" name="Grid Color" datatype="string" default="FF2C3440"/>
+			<Pin id="6" name="Curve Color" datatype="string" default="FFFFB347"/>
+			<Pin id="7" name="Fill Color" datatype="string" default="30FFB347"/>
+			<Pin id="8" name="Frames Color" datatype="string" default="60A88A5B"/>
+			<Pin id="9" name="Text Color" datatype="string" default="FFC8D0DC"/>
+			<Pin id="10" name="Level Color" datatype="string" default="305BE7FF"/>
+			<Pin id="11" name="Line Width" datatype="float" default="1.5"/>
+			<Pin id="12" name="Show Grid" datatype="bool" default="1"/>
+			<Pin id="13" name="Show Text" datatype="bool" default="1"/>
+			<Pin id="14" name="Font Size" datatype="float" default="11"/>
+		</GUI>
+	</Plugin>
+</PluginList>
