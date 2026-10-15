@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>SXE Waveshaper</title>
+<style>
+ body { font-family: Segoe UI, Helvetica, Arial, sans-serif; max-width: 52em; margin: 2em auto; line-height: 1.45; color: #222; }
+ code, pre { background: #f2f2f2; padding: 1px 4px; border-radius: 3px; }
+ pre { padding: 8px; }
+ td, th { text-align: left; vertical-align: top; padding: 2px 10px 2px 0; }
+</style>
+</head>
+<body>
+<h1>SXE Waveshaper</h1>
+<p>Stereo-Waveshaper mit einer Tabelle aus Formeln. Mit <b>Position</b> scrollt man durch die Tabelle wie bei einem Wavetable-Oszillator;
+zwischen zwei Nachbarn wird stufenlos überblendet. Vier Modulationseingänge <b>A–D</b> speisen Variablen in den Formeln.</p>
+
+<h2>Pins</h2>
+<table>
+<tr><td>Left In, Right In</td><td>Audio, ±5 V entspricht x = −1…+1</td></tr>
+<tr><td>Position</td><td>0…10 V = erste…letzte Funktion (Morph dazwischen)</td></tr>
+<tr><td>A, B, C, D</td><td>Audio, Bereich immer −5…+5 V (wird darauf begrenzt), in der Formel auf den angegebenen Bereich skaliert</td></tr>
+<tr><td>Mix</td><td>0…10 V = trocken…nass (trocken ist latenzkorrigiert)</td></tr>
+<tr><td>Table</td><td>Saturation, Folding, Harmonics, Asymmetric, Digital oder Custom</td></tr>
+<tr><td>Functions</td><td>eigene Funktionsliste, gilt bei Table = Custom</td></tr>
+<tr><td>Oversampling</td><td>Off, 2x, 4x (Standard), 8x – eingeschaltet 32 Samples Latenz</td></tr>
+<tr><td>DC Block</td><td>entfernt Gleichanteil (asymmetrische Kurven)</td></tr>
+<tr><td>Display Table / Curve</td><td>an <b>SXE Waveshaper Display</b> anschließen (im selben Container)</td></tr>
+</table>
+
+<h2>Variablen</h2>
+<p><code>A(-1.5, 3.3)</code> heißt: −5 V am Pin A → −1.5, 0 V → 0.9, +5 V → 3.3. Ohne Klammer gilt <code>A</code> = <code>A(-1, 1)</code>.
+Dieselbe Variable darf in einer Formel mehrfach mit verschiedenen Bereichen vorkommen.</p>
+
+<h2>Funktionsliste</h2>
+<p>Einträge durch <code>;</code> oder Zeilenumbruch trennen, optional mit Namen davor. Zeilen mit <code>#</code> oder <code>//</code> sind Kommentare. Max. 64 Funktionen.</p>
+<pre>Clean: x
+Drive: tanh(x*A(1,10))
+Fold: fold(x*A(1,6) + B(-1,1))
+Crush: quant(x, 2^A(1,8))</pre>
+
+<h2>Syntax</h2>
+<p><b>Eingang</b> <code>x</code> (−1…+1), Ergebnis y (−1…+1 = ±5 V, begrenzt auf ±20 V). Konstanten <code>pi</code>, <code>e</code>.</p>
+<p><b>Operatoren</b> <code>+ - * / % ^</code>, Vergleiche <code>&lt; &gt; &lt;= &gt;= == !=</code> (ergeben 0/1), <code>&amp;&amp; || !</code>,
+implizite Multiplikation <code>2x</code>, <code>3(x+1)</code>.</p>
+<p><b>Funktionen</b> sin cos tan asin acos atan atan2(y,x) sinh cosh tanh exp log log2 log10 sqrt abs sign floor ceil round frac
+mod(a,b) pow(a,b) min max clamp(v,lo,hi) if(c,a,b) lerp(a,b,t) step(edge,v)</p>
+<p><b>Waveshaping</b>
+<code>sat(v)</code> = v/(1+|v|),
+<code>hard(v)</code> = Clip auf ±1,
+<code>fold(v)</code> Dreiecks-Fold,
+<code>wrap(v)</code> Wrap-around,
+<code>spow(v,p)</code> = sign(v)·|v|^p,
+<code>cheb(n,v)</code> Tschebyschow-Polynom T<sub>n</sub> (n-te Harmonische bei vollem Sinus),
+<code>quant(v,s)</code> Stufen von 1/s,
+<code>sinc(v)</code>.</p>
+<p>Fehlerhafte Formeln lassen das Signal unverändert durch; das Display zeigt die Fehlermeldung rot an.
+NaN/Unendlich (z. B. <code>log(x)</code> bei x ≤ 0) werden zu 0.</p>
+
+<h2>SXE Waveshaper Display</h2>
+<p>2D: aktuelle Übertragungskurve, Diagonale y = x als Referenz, blaues Band = Eingangspegel, Marker auf der Kurve.
+3D: alle Funktionen der Tabelle, aktuelle hervorgehoben. Oben Name und Index, unten Formel und die aktuellen Werte von A–D
+(im Bereich der aktuellen Formel). Farben als Pins (AARRGGBB oder RRGGBB, <code>#</code> erlaubt), dazu Line Width, Show Grid, Show Text, Font Size.</p>
+</body>
+</html>

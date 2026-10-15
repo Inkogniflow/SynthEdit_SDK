@@ -1,0 +1,6 @@
+build/
+test/harness
+test/harness_rel
+test/formula_test
+test/*.log
+test/*.ops
