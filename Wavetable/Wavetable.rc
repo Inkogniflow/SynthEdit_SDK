@@ -1,0 +1,9 @@
+#include "resource.h"
+#include "windows.h"
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+/////////////////////////////////////////////////////////////////////////////
+// GMPXML - embeds the module descriptions into the .sem
+
+IDR_GMPXML1             GMPXML                  "Wavetable.xml"
