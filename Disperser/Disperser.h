@@ -19,6 +19,7 @@
 
 #define _USE_MATH_DEFINES
 #include <math.h>
+#include <cmath>
 #include <algorithm>
 #include <vector>
 #include "../shared/FilterBase.h"
