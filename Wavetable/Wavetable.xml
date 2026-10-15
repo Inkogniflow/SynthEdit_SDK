@@ -5,10 +5,18 @@
 		<Audio>
 			<Pin name="Pitch" datatype="float" rate="audio" default="0.5"/>
 			<Pin name="Position" datatype="float" rate="audio" default="0"/>
+			<Pin name="Phase" datatype="float" rate="audio" default="0"/>
 			<Pin name="Sync" datatype="float" rate="audio" default="0"/>
-			<Pin name="Table" datatype="enum" default="0" metadata="Classic,PWM,Harmonic Sweep,Formant Vowels,Sync Sweep,Wavefold,WAV File"/>
+			<Pin name="Table" datatype="enum" default="0" metadata="Classic,PWM,Harmonic Sweep,Formant Vowels,Sync Sweep,Wavefold,WAV File,File List"/>
 			<Pin name="Wavetable File" datatype="string" default="" isFilename="true" metadata="wav"/>
-			<Pin name="Output" direction="out" datatype="float" rate="audio"/>
+			<Pin name="File List" datatype="string" default=""/>
+			<Pin name="Voices" datatype="int" default="1"/>
+			<Pin name="Detune" datatype="float" rate="audio" default="0.3"/>
+			<Pin name="Width" datatype="float" rate="audio" default="0.7"/>
+			<Pin name="Pan" datatype="float" rate="audio" default="0"/>
+			<Pin name="On" datatype="bool" default="1"/>
+			<Pin name="Left" direction="out" datatype="float" rate="audio"/>
+			<Pin name="Right" direction="out" datatype="float" rate="audio"/>
 			<Pin name="Display Table" direction="out" datatype="blob"/>
 			<Pin name="Display Wave" direction="out" datatype="blob"/>
 		</Audio>

@@ -32,6 +32,7 @@ private:
 	void onGateChanged(int voice);
 	void onColorsChanged();
 	void onRedraw();
+	void redraw();
 
 	struct TableView
 	{
