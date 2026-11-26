@@ -14,9 +14,11 @@ REGISTER_PLUGIN2(Waveshaper, L"Sxynthedit Waveshaper");
 namespace
 {
 	constexpr int kCustomTable = NumBuiltIns; // enum entry after the built-ins
+	constexpr int kCollectionTable = NumBuiltIns + 1; // appended after Custom so stored Table values stay valid
 	constexpr float kMaxY = 4.f;              // +/-20 V, keeps runaway formulas bounded
 
-	inline float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
+	// NaN-safe: NaN maps to lo (a NaN position would otherwise index the function table out of range)
+	inline float clampf(float v, float lo, float hi) { return !(v >= lo) ? lo : (v > hi ? hi : v); }
 }
 
 Waveshaper::Waveshaper()
@@ -66,7 +68,9 @@ void Waveshaper::loadFunctions()
 	const int choice = pinTable.getValue();
 	std::shared_ptr<const FunctionSet> newSet;
 
-	if (choice >= kCustomTable)
+	if (choice == kCollectionTable)
+		newSet = getCollection();
+	else if (choice >= kCustomTable)
 		newSet = parseFunctionList(JmUnicodeConversions::WStringToUtf8(pinFunctions.getValue()));
 	else
 		newSet = getBuiltIn(choice < 0 ? 0 : choice);

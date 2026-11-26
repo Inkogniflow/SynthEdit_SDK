@@ -326,6 +326,29 @@ int main(int argc, char** argv)
 		CHECK(texts().find("error:") != std::string::npos, b);
 	}
 
+	// Collection (Table = 6): audio-rate A..D, Position sweep through all 64 functions, every oversampling mode, NaN/inf robustness
+	for (int os = 0; os < 4; ++os)
+	{
+		DspModule m; m.create(kId, kAudioPins); init(m, 6, os, true);
+		std::vector<float> l, r;
+		const int total = 48000;
+		bool finite = true; double peak = 0;
+		runFn(m, total, [&](int i, float& a, float& c) { a = 0.45f * (float)std::sin(2 * M_PI * 220 * i / kRate); c = 0.3f * (float)std::sin(2 * M_PI * 331 * i / kRate); }, l, r,
+			[&](int i)
+			{
+				const int k = i % kBlock;
+				m.buffers[P_POS][k] = 0.5f + 0.5f * (float)std::sin(2 * M_PI * 0.7 * i / kRate);
+				m.buffers[P_A][k] = 0.5f * (float)std::sin(2 * M_PI * 37 * i / kRate);
+				m.buffers[P_B][k] = 0.5f * (float)std::sin(2 * M_PI * 1100 * i / kRate);   // audio-rate
+				m.buffers[P_C][k] = 0.5f * (float)std::sin(2 * M_PI * 5.3 * i / kRate);
+				m.buffers[P_D][k] = 0.5f * (float)std::sin(2 * M_PI * 2900 * i / kRate);   // audio-rate
+				if (i == 20000) { m.buffers[P_POS][k] = NAN; m.buffers[P_A][k] = NAN; m.buffers[P_B][k] = INFINITY; }
+			});
+		for (float v : l) { if (!std::isfinite(v)) finite = false; peak = std::max(peak, (double)std::fabs(v)); }
+		snprintf(b, sizeof b, "Collection, os=%d: audio-rate A..D + position sweep + NaN/inf injected: finite, peak %.3f (<= 2 = 20 V)", os, peak);
+		CHECK(finite && peak <= 2.001, b);
+	}
+
 	// stale/foreign blob is ignored
 	{
 		std::vector<uint8_t> junk(300, 0xAB);
