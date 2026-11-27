@@ -7,6 +7,8 @@ cd "$(dirname "$0")"
 R=../..
 ${CXX:-g++} -std=c++17 -O1 -Wall -Wno-unknown-pragmas -Wno-unused-parameter formula_test.cpp ../FormulaEngine.cpp -o formula_test
 ./formula_test > formula_test.log && tail -1 formula_test.log
+${CXX:-g++} -std=c++17 -O1 -Wall -Wno-unknown-pragmas -Wno-unused-parameter collection_test.cpp ../FormulaEngine.cpp -o collection_test
+./collection_test > collection_test.log && tail -1 collection_test.log
 ${CXX:-g++} -std=c++17 -g -O1 -D_DEBUG -Wno-unknown-pragmas -I$R/se_sdk3 -I$R/shared -I.. -I. \
   harness.cpp ../FormulaEngine.cpp ../Waveshaper.cpp ../WaveshaperDisplay.cpp ../WaveshaperDisplayGui.cpp \
   $R/se_sdk3/mp_sdk_audio.cpp $R/se_sdk3/mp_sdk_common.cpp $R/se_sdk3/mp_sdk_gui.cpp -o harness -lpthread

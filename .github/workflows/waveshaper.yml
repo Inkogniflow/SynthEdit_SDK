@@ -1,0 +1,48 @@
+name: Waveshaper
+
+on:
+  push:
+    paths: [ 'Waveshaper/**', 'se_sdk3/**', 'shared/**', 'plugin_helper.cmake', '.github/workflows/waveshaper.yml' ]
+  workflow_dispatch:
+
+jobs:
+  test-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests, DSP harness, benchmark, spectra
+        working-directory: Waveshaper/test
+        run: |
+          sh run_tests.sh
+          g++ -std=c++17 -O2 -Wno-unknown-pragmas bench.cpp ../FormulaEngine.cpp -o bench && ./bench | tail -12
+          g++ -std=c++17 -O2 -Wno-unknown-pragmas spectra.cpp ../FormulaEngine.cpp -o spectra && ./spectra | head -8
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure and build (x64 Release)
+        working-directory: Waveshaper
+        run: |
+          cmake -B build -A x64
+          cmake --build build --config Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Waveshaper-win-x64
+          path: Waveshaper/build/**/*.sem
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure and build (universal arm64 + x86_64)
+        working-directory: Waveshaper
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          cmake --build build --config Release
+      - name: Ad-hoc sign
+        run: find Waveshaper/build -name "*.sem" -maxdepth 3 -exec codesign --force --deep -s - {} \;
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Waveshaper-mac-universal
+          path: Waveshaper/build/**/*.sem
