@@ -11,7 +11,7 @@
 			<Pin name="C" datatype="float" rate="audio" default="0"/>
 			<Pin name="D" datatype="float" rate="audio" default="0"/>
 			<Pin name="Mix" datatype="float" rate="audio" default="1"/>
-			<Pin name="Table" datatype="enum" default="0" metadata="Saturation,Folding,Harmonics,Asymmetric,Digital,Custom"/>
+			<Pin name="Table" datatype="enum" default="0" metadata="Saturation,Folding,Harmonics,Asymmetric,Digital,Custom,Collection"/>
 			<Pin name="Functions" datatype="string" default="Clean: x; Drive: tanh(x*A(1,10)); Fold: fold(x*A(1,6)+B(-1,1)); Crush: quant(x, 2^A(1,8))"/>
 			<Pin name="Oversampling" datatype="enum" default="2" metadata="Off,2x,4x,8x"/>
 			<Pin name="DC Block" datatype="bool" default="1"/>

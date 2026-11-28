@@ -1,3 +1,4 @@
+#include <fstream>
 // Minimal SynthEdit-like host for the SXE Waveshaper modules: loads them through MP_GetFactory,
 // drives DSP and GUI parts, records drawing calls (incl. text) for rendering.
 #include "harness_infra.inc"
@@ -64,6 +65,37 @@ int main(int argc, char** argv)
 {
 	const std::string dir = argc > 1 ? argv[1] : ".";
 	char b[200];
+	if (getenv("WS_ALIAS"))
+	{
+		// Alias measurement: RMS distance of the 2x / 4x result to the 8x result, relative to the 8x signal, 1337 Hz sine at 4.5 V.
+		// Usage: WS_ALIAS=<file with "name: formula" lines> ./harness .   -> prints CSV: name,level,2x_dB,4x_dB
+		std::ifstream in(getenv("WS_ALIAS")); std::string line;
+		while (std::getline(in, line))
+		{
+			const size_t c = line.find(':'); if (c == std::string::npos || line[0] == '#') continue;
+			const std::string name = line.substr(0, c);
+			std::wstring wf(line.begin() + c + 1, line.end());
+			for (float lvl : { 0.f, 0.4f })
+			{
+				std::vector<float> res[4];
+				for (int os : { 1, 2, 3 })
+				{
+					DspModule m; m.create(kId, kAudioPins); init(m, 5, os, false, wf);
+					for (int p : { P_A, P_B, P_C, P_D }) m.setAudio(p, lvl);
+					std::vector<float> rr; runFn(m, 24000, [](int i, float& l, float& r) { l = r = 0.45f * (float)std::sin(2 * M_PI * 1337.0 * i / kRate); }, res[os], rr);
+				}
+				double e[4] = {}, ref = 0;
+				for (size_t i = 4000; i < res[3].size(); ++i) ref += (double)res[3][i] * res[3][i];
+				for (int os : { 1, 2 })
+				{
+					for (size_t i = 4000; i < res[3].size(); ++i) { const double d = (double)res[os][i] - res[3][i]; e[os] += d * d; }
+				}
+				printf("%s,%s,%.1f,%.1f\n", name.c_str(), lvl == 0.f ? "mid" : "high",
+					10 * std::log10(e[1] / (ref + 1e-30) + 1e-12), 10 * std::log10(e[2] / (ref + 1e-30) + 1e-12));
+			}
+		}
+		return 0;
+	}
 
 	printf("SXE Waveshaper (DSP), host block %d\n", kBlock);
 	DspModule ws;
@@ -230,6 +262,39 @@ int main(int argc, char** argv)
 			if (!finite(l) || peak(l) > 2.0001f || peak(l) < 0.05f || tableCount(m.host) != 8) ok = false;
 		}
 		snprintf(b, sizeof b, "all 5 built-in tables swept: finite, audible, 8 functions each (peak%s)", info.c_str()); CHECK(ok, b);
+	}
+
+	// Collection (table 6, after Custom): 64 functions, all A..D at audio rate, Position sweeping, every oversampling setting
+	{
+		bool ok = true; std::string info; float worst = 0.f;
+		for (int os = 0; os < 4; ++os)
+		{
+			DspModule m; m.create(kId, kAudioPins); init(m, 6, os, true);
+			m.stream(P_POS, true);
+			for (int p : { P_A, P_B, P_C, P_D }) m.stream(p, true);
+			std::vector<float> l, r;
+			runFn(m, 96000, sine(220, 0.5f), l, r, [&](int i) {
+				const int k = i % kBlock; const float t = i / kRate;
+				m.buffers[P_POS][k] = (float)(0.5 + 0.5 * std::sin(2 * M_PI * 0.5 * t - M_PI / 2)); // 0..1 over 2 s
+				m.buffers[P_A][k] = 0.5f * (float)std::sin(2 * M_PI * 1100 * t);
+				m.buffers[P_B][k] = 0.5f * (float)std::sin(2 * M_PI * 2900 * t);
+				m.buffers[P_C][k] = 0.5f * (float)std::sin(2 * M_PI * 313 * t);
+				m.buffers[P_D][k] = 0.5f * (float)(2.0 * (t * 0.7 - std::floor(t * 0.7)) - 1.0);
+			});
+			const float pk = std::max(peak(l), peak(r));
+			worst = std::max(worst, pk);
+			char c[40]; snprintf(c, 40, " %dx:%.1fV", 1 << os, pk * 10); info += c;
+			if (!finite(l) || !finite(r) || pk > 2.0001f || pk < 0.05f || tableCount(m.host) != 64) ok = false;
+		}
+		snprintf(b, sizeof b, "Collection (64 functions): Position sweep + audio-rate A-D at Off/2x/4x/8x: finite, |out| <= 20 V (peak%s)", info.c_str()); CHECK(ok, b);
+		snprintf(b, sizeof b, "Collection stays near nominal level: worst peak %.1f V (nominal 5 V, filter/DC-block overshoot allowed up to 7.5 V)", worst * 10); CHECK(worst <= 0.75f, b);
+	}
+
+	// Collection must not change the meaning of existing patches: Table 5 is still Custom
+	{
+		DspModule m; m.create(kId, kAudioPins); init(m, 5, 0, false, L"x*0.5");
+		std::vector<float> l, r; runFn(m, 2000, sine(1000, 0.4f), l, r);
+		snprintf(b, sizeof b, "Table index 5 is still Custom (peak %.3f, expect 0.2)", peak(l)); CHECK(std::fabs(peak(l) - 0.2f) < 0.01f, b);
 	}
 
 	// CPU: heaviest built-in at 8x

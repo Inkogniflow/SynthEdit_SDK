@@ -127,4 +127,9 @@ namespace sxws
 	enum BuiltIn { Saturation, Folding, Harmonics, Asymmetric, Digital, NumBuiltIns };
 	const char* builtInText(int which);
 	std::shared_ptr<const FunctionSet> getBuiltIn(int which);
+
+	// The Collection table: 64 functions in 8 categories (Dist, Clip, Sat, Fold, Harm, Digi, Asym, Exp).
+	// Selected by the Table pin entry after Custom, so existing patches keep their meaning.
+	const char* collectionText();
+	std::shared_ptr<const FunctionSet> getCollection();
 }

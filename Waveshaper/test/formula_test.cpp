@@ -61,6 +61,32 @@ int main() {
   bool bok=true; for(int i=0;i<300;++i) if (std::fabs(y[i]-xs[i]*((i%2)?2.f:0.f))>1e-6f) bok=false;
   printf("%s  block eval 300 samples with audio-rate A\n", bok?"ok  ":"FAIL"); if(!bok)++fails;
   for (int b=0;b<NumBuiltIns;++b){ auto s=getBuiltIn(b); for (auto& f: s->functions) if(!f.program.ok()){++fails; printf("FAIL builtin %d %s: %s\n",b,f.name.c_str(),f.program.error().c_str());} printf("builtin %d: %zu functions, mask %u\n", b, s->functions.size(), s->varMask);}
+  {
+    auto c=getCollection();
+    printf("collection: %zu functions, mask %u\n", c->functions.size(), c->varMask);
+    if (c->functions.size()!=64) { ++fails; printf("FAIL collection size\n"); }
+    const float lv[5]={-1,-.5f,0,.5f,1};
+    int bad=0; double worst=0;
+    for (size_t k=0;k<c->functions.size();++k){
+      auto& fn=c->functions[k];
+      if(!fn.program.ok()){++fails;printf("FAIL collection %zu %s: %s\n",k+1,fn.name.c_str(),fn.program.error().c_str());continue;}
+      // no implicit multiplication in the collection: every formula must also compile and agree after the explicit-only check
+      for (size_t i=0;i+1<fn.formula.size();++i){ char a=fn.formula[i], b2=fn.formula[i+1]; if (isdigit((unsigned char)a) && (isalpha((unsigned char)b2) && b2!='e' && b2!='E')) { ++fails; printf("FAIL implicit multiplication in %s\n",fn.name.c_str()); break; } }
+      unsigned m=fn.program.varMask(); int combos=1; for(int v=0;v<4;v++) if(m&(1u<<v)) combos*=5;
+      for(int cb=0;cb<combos;cb++){
+        int cc=cb; float val[4]={0,0,0,0};
+        for(int v=0;v<4;v++) if(m&(1u<<v)){val[v]=lv[cc%5];cc/=5;}
+        for(int i=0;i<=400;i++){
+          float x=-1+2.f*i/400, y=fn.program.evalOne(x,val);
+          if(!std::isfinite(y)||std::fabs(y)>1.05f){ if(bad<5) printf("FAIL collection %zu %s x=%.3f y=%g\n",k+1,fn.name.c_str(),x,y); ++bad; }
+          if(std::fabs(y)>worst) worst=std::fabs(y);
+          if(i==200 && std::fabs(y)>1e-5f){ if(bad<5) printf("FAIL collection %zu %s y(0)=%g\n",k+1,fn.name.c_str(),y); ++bad; }
+        }
+      }
+    }
+    printf("%s  collection: all A-D corner combinations x 401 inputs finite, |y|<=1.05, y(0)=0 (worst |y| %.4f)\n", bad?"FAIL":"ok  ", worst);
+    if(bad) ++fails;
+  }
   auto l = parseFunctionList("# comment\nOne: x ; tanh(3x)\r\n\n// c\nBad: sin(");
   printf("list: %zu entries: '%s' '%s' '%s' err='%s'\n", l->functions.size(), l->functions[0].name.c_str(), l->functions[1].name.c_str(), l->functions[2].name.c_str(), l->functions[2].program.error().c_str());
   if (l->functions.size()!=3) ++fails;

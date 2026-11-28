@@ -877,4 +877,95 @@ std::shared_ptr<const FunctionSet> getBuiltIn(int which)
 		cache[which] = parseFunctionList(builtInText(which));
 	return cache[which];
 }
+
+// ---------------------------------------------------------------------- Collection (64 functions, 8 categories of 8)
+// Role convention: A intensity (drive / fold amount / steps), B position and shape (bias, symmetry, knee),
+// C extra morphology, D mix / complexity. Every entry has y(0) = 0 and |y| <= 1 for |x| <= 1 at all A..D settings.
+const char* collectionText()
+{
+	return
+		"# ---- Dist (1-8): A drive, B shape/bias, C secondary, D mix\n"
+		"Dist Soft Drive: tanh(x*A(1,12))/tanh(A(1,12))\n"
+		"Dist Shaped Drive: tanh(spow(x,B(0.5,2))*A(1,10))/tanh(A(1,10))\n"
+		"Dist Tilt Drive: tanh(x*A(1,10))*(1+B(-0.5,0.5)*x)/(1+abs(B(-0.5,0.5)))\n"
+		"Dist Dynamic Drive: tanh(x*A(1,8)*(1+C(0,3)*abs(x)))/tanh(A(1,8)*(1+C(0,3)))\n"
+		"Dist Crossover: tanh(A(1,6)*sign(x)*max(abs(x)-B(0,0.5),0)/(1-B(0,0.5)))/tanh(A(1,6))\n"
+		"Dist Exponential Drive: sign(x)*(1-exp(-abs(x)*A(1,10)))/(1-exp(-A(1,10)))\n"
+		"Dist Quintic Drive: (15*hard(x*A(1,4))-10*hard(x*A(1,4))^3+3*hard(x*A(1,4))^5)/8\n"
+		"Dist Cross-Mod Drive: tanh(x*A(1,8)+C(0.5,4)*sin(x*B(1,6)*pi))/tanh(A(1,8)+C(0.5,4))\n"
+		"# ---- Clip (9-16)\n"
+		"Clip Threshold: hard(x/A(0.1,1))\n"
+		"Clip Soft Knee: sign(x)*(min(abs(x),A(0.1,0.9))+(1-A(0.1,0.9))*tanh(max(abs(x)-A(0.1,0.9),0)/(1-A(0.1,0.9))*B(1,6)))\n"
+		"Clip Asymmetric: (hard(x*A(1,6)+B(0,0.8))-hard(B(0,0.8)))/(1+hard(B(0,0.8)))\n"
+		"Clip Moving Window: (clamp(x*A(1,4),B(-0.6,0.6)-C(0.2,1),B(-0.6,0.6)+C(0.2,1))-clamp(0,B(-0.6,0.6)-C(0.2,1),B(-0.6,0.6)+C(0.2,1)))/(C(0.2,1)+abs(B(-0.6,0.6)))\n"
+		"Clip Two Slope: hard(sign(x)*(min(abs(x),C(0.2,0.8))*A(1,4)+max(abs(x)-C(0.2,0.8),0)*B(0,1)*A(1,4)))\n"
+		"Clip Folded: fold(hard(x*A(1,4))*B(1,3))\n"
+		"Clip Soft-Hard Morph: lerp(tanh(x*A(1,8))/tanh(A(1,8)),hard(x*A(1,8)),D(0,1))\n"
+		"Clip Sine: sin(hard(x*A(1,3))*B(0.5,1)*pi/2)/sin(B(0.5,1)*pi/2)\n"
+		"# ---- Sat (17-24)\n"
+		"Sat Analog: x*((1+A(1,6)^B(1.5,6))/(1+abs(x*A(1,6))^B(1.5,6)))^(1/B(1.5,6))\n"
+		"Sat Triode: if(x>0,B(0.6,1)*tanh(x*A(1,6)),tanh(x*A(1,6)*B(0.6,1)))\n"
+		"Sat Tape Warm: tanh(x*A(1,5))*(1-B(0,0.3)*x^2)\n"
+		"Sat Transformer: (tanh(x*A(1,6))+B(0,0.3)*cheb(3,hard(x)))/(1+B(0,0.3))\n"
+		"Sat Soft Cubic: 1.5*hard(x*A(1,2.5))-0.5*hard(x*A(1,2.5))^3\n"
+		"Sat Warm Even: (tanh(x*A(1,5))+B(0,0.3)*tanh(x*A(1,5))^2)/(1+B(0,0.3))\n"
+		"Sat Multi-Stage: tanh(B(1,5)*tanh(x*A(1,6)))/tanh(B(1,5)*tanh(A(1,6)))\n"
+		"Sat Sag: tanh(x*A(1,6)/(1+C(0,3)*x^2))\n"
+		"# ---- Fold (25-32)\n"
+		"Fold Triangle: fold(x*A(1,8))\n"
+		"Fold Sine: sin(x*A(1,8)*pi/2)\n"
+		"Fold Multi: fold(fold(x*A(1,6))*B(1,3))\n"
+		"Fold Asymmetric: fold(x*A(1,6)*(1+B(0,0.8)*x))\n"
+		"Fold Moving: (fold(x*A(1,6)+B(-0.5,2.5))-fold(B(-0.5,2.5)))/(1+abs(fold(B(-0.5,2.5))))\n"
+		"Fold Ripple: fold(x*A(1,5)+C(0,0.6)*sin(x*B(2,12)*pi))\n"
+		"Fold Feedback: fold(x*A(1,4)+B(0.2,0.9)*fold(x*A(1,4)+B(0.2,0.9)*fold(x*A(1,4))))\n"
+		"Fold Complex: sin(pi/2*B(1,4)*fold(x*A(1,6)))\n"
+		"# ---- Harm (33-40)\n"
+		"Harm Even: (x+A(0,0.5)*x^2+B(0,0.3)*x^4)/(1+A(0,0.5)+B(0,0.3))\n"
+		"Harm Odd: (hard(x)+A(0,1)*cheb(3,hard(x))+B(0,1)*cheb(5,hard(x)))/(1+A(0,1)+B(0,1))\n"
+		"Harm Exciter: (x+A(0,1)*abs(x)*sin(x*B(2,8)*pi))/(1+A(0,1))\n"
+		"Harm Chebyshev Glide: hard(x)*lerp(cheb(floor(A(1,8)),hard(x)),cheb(floor(A(1,8))+1,hard(x)),frac(A(1,8)))\n"
+		"Harm Polynomial: hard(x)*(1+B(0,0.5)*hard(x)+A(-0.8,0.8)*hard(x)^2)/(1+B(0,0.5)+abs(A(-0.8,0.8)))\n"
+		"Harm Dynamic: x*cos(x^2*A(0,4)*pi/2)\n"
+		"Harm Sweep: sin(A(1,9)*asin(hard(x)))\n"
+		"Harm Sine Stack: (sin(x*B(1,4)*pi/2)+A(0,1)*sin(x*B(1,4)*pi*1.5)+C(0,1)*sin(x*B(1,4)*pi*2.5))/(1+A(0,1)+C(0,1))\n"
+		"# ---- Digi (41-48)\n"
+		"Digi Bit Reduction: hard(quant(x,2^A(1,8)))\n"
+		"Digi Soft Quantize: hard(x-D(0,1)*sin(x*A(2,16)*2*pi)/(A(2,16)*2*pi))\n"
+		"Digi Smooth Steps: hard((floor(x*A(2,12))+0.5+0.5*tanh(B(2,8)*(frac(x*A(2,12))-0.5))/tanh(B(2,8)*0.5))/A(2,12))\n"
+		"Digi Digital Fold: fold(quant(x*A(1,6),B(2,16)))\n"
+		"Digi Mid-Rise: hard(sign(x)*(floor(abs(x)*A(2,16))+0.5)/A(2,16))\n"
+		"Digi mu-Law: sign(x)*((1+B(10,255))^hard(quant(log(1+B(10,255)*abs(hard(x)))/log(1+B(10,255)),A(2,16)))-1)/B(10,255)\n"
+		"Digi Wrap-Fold Morph: lerp(wrap(x*A(1,4)),fold(x*A(1,4)),D(0,1))\n"
+		"Digi Crushed Sat: tanh(hard(quant(x,B(3,24)))*A(1,6))/tanh(A(1,6))\n"
+		"# ---- Asym (49-56)\n"
+		"Asym Positive Bend: if(x>0,tanh(x*A(1,6))/A(1,6),x)\n"
+		"Asym Negative Bend: if(x<0,x-A(0,1)*x^2,x)/(1+A(0,1))\n"
+		"Asym Half-Wave: x*(1-A(0,1)*(0.5-0.5*tanh(x*B(4,40))))\n"
+		"Asym Positive Sat: (tanh(x*A(1,6)+B(0,0.8))-tanh(B(0,0.8)))/(1+tanh(B(0,0.8)))\n"
+		"Asym Negative Sat: (atan(x*A(1,6)+B(-0.8,0))-atan(B(-0.8,0)))/(pi/2+atan(abs(B(-0.8,0))))\n"
+		"Asym Moving Bias: (tanh(x*A(1,6)+B(-0.8,0.8)*(1-x^2))-tanh(B(-0.8,0.8)))/(1+abs(tanh(B(-0.8,0.8))))\n"
+		"Asym Dynamic: tanh(x*A(1,6)+B(0,1)*x^2)\n"
+		"Asym Alternating: tanh(x*A(1,6)*(1+B(0,0.7)*sin(x*C(1,6)*pi)))\n"
+		"# ---- Exp (57-64)\n"
+		"Exp Logistic: lerp(x,sign(x)*A(2.8,4)*(A(2.8,4)*abs(hard(x))*(1-abs(hard(x))))*(1-A(2.8,4)*abs(hard(x))*(1-abs(hard(x)))),D(0,1))\n"
+		"Exp Feedback Loop: tanh(x*A(1,6)+B(0.5,3.2)*tanh(x*A(1,6)+B(0.5,3.2)*tanh(x*A(1,6))))\n"
+		"Exp Interference: (sin(x*A(1,6)*pi/2)+sin(x*A(1,6)*B(1,1.5)*pi/2))/2\n"
+		"Exp Fractal Sum: (sin(x*A(1,4)*pi/2)+B(0,1)*sin(x*A(1,4)*pi)/2+C(0,1)*sin(x*A(1,4)*pi*2)/4+D(0,1)*sin(x*A(1,4)*pi*4)/8)/(1+B(0,1)/2+C(0,1)/4+D(0,1)/8)\n"
+		"Exp Recursive Sine: sin(C(0.3,1.8)*pi/2*sin(B(0.3,1.8)*pi/2*sin(x*A(0.5,2.5)*pi/2)))\n"
+		"Exp Phase Warp: sin((x+A(0,0.6)*sin(x*B(1,6)*pi))*C(0.5,2.5)*pi/2)\n"
+		"Exp Triple Morph: lerp(lerp(tanh(x*A(1,6))/tanh(A(1,6)),fold(x*A(1,6)),clamp(D(0,2),0,1)),wrap(x*A(1,6)),clamp(D(0,2)-1,0,1))\n"
+		"Exp Quad Mixer: (0.1*x+A(0,1)*tanh(x*3)/tanh(3)+B(0,1)*fold(x*3)+C(0,1)*sin(x*pi*1.5)+D(0,1)*cheb(3,hard(x)))/(0.1+A(0,1)+B(0,1)+C(0,1)+D(0,1))\n";
+}
+
+std::shared_ptr<const FunctionSet> getCollection()
+{
+	static std::mutex lock;
+	static std::shared_ptr<const FunctionSet> cache;
+
+	std::lock_guard<std::mutex> guard(lock);
+	if (!cache)
+		cache = parseFunctionList(collectionText());
+	return cache;
+}
 }
